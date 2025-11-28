@@ -16,6 +16,9 @@
 #include "ryu.h"
 #include "atof.h"
 
+/* C-API */
+#include "msgspec.h"
+
 /* Python version checks */
 #define PY311_PLUS (PY_VERSION_HEX >= 0x030b0000)
 #define PY312_PLUS (PY_VERSION_HEX >= 0x030c0000)
@@ -2445,6 +2448,24 @@ static PyTypeObject Factory_Type = {
 };
 
 /*************************************************************************
+ * Factory C-API                                                         *
+ *************************************************************************/
+
+/* Factory_New is already implemented so no need to put it here we just have
+to remeber to initalize it */
+
+PyObject* Factory_Create(PyObject* self){
+    if (!Py_IS_TYPE(self, &Factory_Type)){
+        PyErr_Format(PyExc_TypeError, "expected a msgspec.Factory type got %R", self);
+        return NULL;
+    }
+    /* Call lower level now that typecheck has been properly handled... */
+    return Factory_Call(self);
+}
+
+
+
+/*************************************************************************
  * Field                                                                 *
  *************************************************************************/
 
@@ -2573,6 +2594,79 @@ static PyTypeObject Field_Type = {
     .tp_dealloc = (destructor) Field_dealloc,
     .tp_members = Field_members,
 };
+
+/*************************************************************************
+ * Field C-API                                                           *
+ *************************************************************************/
+
+int Field_CheckOrFail(PyObject* self){
+    if (!Py_IS_TYPE(self, &Field_Type)){
+        PyErr_SetString(
+            PyExc_TypeError, "field must be a msgspec field type"
+        );
+        return -1;
+    }
+    return 0;
+}
+
+/* same as Field_new although much faster due to not needing argument parsing... */
+PyObject* Field_New(PyObject* name, PyObject* value, PyObject* factory){
+    if (name == Py_None) {
+        name = NULL;
+    }
+    else if (!PyUnicode_CheckExact(name)) {
+        PyErr_SetString(PyExc_TypeError, "name must be a str or None");
+        return NULL;
+    }
+    if ((value != NODEFAULT || value != NULL) && (factory != NODEFAULT || factory != NULL)) {
+        PyErr_SetString(
+            PyExc_TypeError, "Cannot set both `value` and `vactory`"
+        );
+        return NULL;
+    }
+    if (factory != NODEFAULT) {
+        if (!PyCallable_Check(factory)) {
+            PyErr_SetString(PyExc_TypeError, "factory must be callable");
+            return NULL;
+        }
+    }
+    Field *self = (Field *)Field_Type.tp_alloc(&Field_Type, 0);
+    if (self == NULL) return NULL;
+    self->default_value = (value != NULL) ? Py_NewRef(value) : Py_NewRef(NODEFAULT);
+    self->default_factory =  (factory != NULL) ? Py_NewRef(factory) : Py_NewRef(NODEFAULT);
+    Py_XINCREF(name);
+    self->name = name;
+    return (PyObject *)self;
+}
+
+int Field_GetName(PyObject* self, PyObject** name){
+    if (Field_CheckOrFail(self) < 0){
+        *name = NULL;
+        return -1;
+    }
+    *name = Py_NewRef(((Field*)self)->name);
+    return 0;
+}
+
+
+int Field_GetDefault(PyObject* self, PyObject** value){
+    if (Field_CheckOrFail(self) < 0){
+        *value = NULL;
+        return -1;
+    }
+    *value = Py_NewRef(((Field*)self)->default_value);
+    return 0;
+}
+
+
+int Field_GetFactory(PyObject* self, PyObject** factory){
+    if (Field_CheckOrFail(self) < 0){
+        *factory = NULL;
+        return -1;
+    }
+    *factory = Py_NewRef(((Field*)self)->default_factory);
+    return 0;
+}
 
 /*************************************************************************
  * AssocList & order handling                                            *
@@ -2773,6 +2867,8 @@ AssocList_Sort(AssocList* list) {
 /*************************************************************************
  * Struct, PathNode, and TypeNode Types                                  *
  *************************************************************************/
+
+/* TODO: Vizonex I might consider putting this in the C-API as enums or in some other way... */
 
 /* Types */
 #define MS_TYPE_ANY                 (1ull << 0)
@@ -22171,6 +22267,48 @@ msgspec_convert(PyObject *self, PyObject *args, PyObject *kwargs)
 
 
 /*************************************************************************
+ * C-API Capsule Setup                                                   *
+ *************************************************************************/
+
+static void
+capsule_free(Msgspec_CAPI* capi)
+{
+    PyMem_Free(capi);
+}
+
+static void
+capsule_destructor(PyObject* o)
+{
+    Msgspec_CAPI* capi = PyCapsule_GetPointer(o, MSGSPEC_CAPI_NAME);
+    capsule_free(capi);
+}
+
+static PyObject*
+new_capsule(MsgspecState* state){
+    Msgspec_CAPI* capi =
+        (Msgspec_CAPI*)PyMem_Malloc(sizeof(Msgspec_CAPI));
+    if (capi == NULL) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+
+    capi->Factory_Type = &Factory_Type;
+    capi->Field_Type = &Field_Type;
+    capi->Factory_New = Factory_New;
+    capi->Factory_Create = Factory_Create;
+    capi->Field_New = Field_New;
+    capi->Field_GetDefault = Field_GetDefault;
+    capi->Field_GetFactory = Field_GetFactory;
+    PyObject* ret =
+        PyCapsule_New(capi, MSGSPEC_CAPI_NAME, capsule_destructor);
+    if (ret == NULL) {
+        capsule_free(capi);
+    }
+    return ret;
+}
+
+
+/*************************************************************************
  * Module Setup                                                          *
  *************************************************************************/
 
@@ -22701,6 +22839,15 @@ PyInit__core(void)
     if (st->StructType == NULL) return NULL;
     Py_INCREF(st->StructType);
     if (PyModule_AddObject(m, "Struct", st->StructType) < 0) return NULL;
+
+    PyObject *capsule = new_capsule(st);
+    if (capsule == NULL) {
+        return NULL;
+    }
+    if (PyModule_AddObject(m, MSGSPEC_CAPI_NAME, capsule) < 0) {
+        return NULL;
+    }
+
 #ifdef Py_GIL_DISABLED
     PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
 #endif
