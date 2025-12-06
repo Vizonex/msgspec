@@ -22270,6 +22270,21 @@ msgspec_convert(PyObject *self, PyObject *args, PyObject *kwargs)
  * C-API Capsule Setup                                                   *
  *************************************************************************/
 
+
+/* Also needed to get the CAPI to work properly */
+
+// gh-106307 added PyModule_Add() to Python 3.13.0a1
+#if PY_VERSION_HEX < 0x030D00A1
+static inline int
+PyModule_Add(PyObject *mod, const char *name, PyObject *value)
+{
+    int res = PyModule_AddObjectRef(mod, name, value);
+    Py_XDECREF(value);
+    return res;
+}
+#endif
+
+
 static void
 capsule_free(Msgspec_CAPI* capi)
 {
@@ -22300,7 +22315,7 @@ new_capsule(MsgspecState* state){
     capi->Field_GetDefault = Field_GetDefault;
     capi->Field_GetFactory = Field_GetFactory;
     PyObject* ret =
-        PyCapsule_New(capi, MSGSPEC_CAPI_NAME, capsule_destructor);
+        PyCapsule_New(capi, MSGSPEC_CAPSULE_NAME, capsule_destructor);
     if (ret == NULL) {
         capsule_free(capi);
     }
@@ -22844,7 +22859,7 @@ PyInit__core(void)
     if (capsule == NULL) {
         return NULL;
     }
-    if (PyModule_AddObject(m, MSGSPEC_CAPI_NAME, capsule) < 0) {
+    if (PyModule_Add(m, MSGSPEC_CAPI_NAME, capsule) < 0) {
         return NULL;
     }
 

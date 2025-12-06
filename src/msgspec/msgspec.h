@@ -81,7 +81,7 @@ returns NULL if import fails. */
 static inline Msgspec_CAPI*
 Msgspec_Import()
 {
-    return (Msgspec_CAPI*)PyCapsule_Import(MSGSPEC_CAPI_NAME, 0);
+    return (Msgspec_CAPI*)PyCapsule_Import(MSGSPEC_CAPSULE_NAME, 0);
 }
 
 #ifdef MSGSPEC_USE_CAPSULE_API // Define if your not using Cython or want to use your own capsule
@@ -97,19 +97,6 @@ static inline int Factory_Check(Msgspec_CAPI* api, PyObject* ob){
 static inline int Factory_CheckExact(Msgspec_CAPI* api, PyObject* ob){
     return Py_IS_TYPE(ob, api->Factory_Type) || PyObject_TypeCheck(ob, api->Factory_Type);
 }
-
-static inline PyObject* Factory_New(Msgspec_CAPI* api, PyObject* factory){
-    return api->Factory_New(factory);
-}
-
-static inline PyObject* Factory_Create(Msgspec_CAPI* api, PyObject* self){
-    return api->Factory_Create(self);
-}
-
-static inline PyObject* Field_New(Msgspec_CAPI* api, PyObject* name, PyObject* value, PyObject* factory){
-    return api->Field_New(name, value, factory);
-};
-
 
 /*************************************************************************
  * Field                                                                 *
