@@ -75,7 +75,6 @@ if TEST_CAPI:
     )
 
 
-
 setup(
     ext_modules=ext_modules,
 )

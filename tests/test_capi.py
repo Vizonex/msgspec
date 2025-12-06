@@ -17,6 +17,7 @@ def test_factory_check():
     not_a_factory = "NOT IT"
     assert not _testcapi.factory_check(not_a_factory)
 
+
 def test_factory_new():
     f = _testcapi.factory_new(str)
     assert isinstance(f, Factory)
@@ -26,28 +27,32 @@ def test_factory_new():
         _testcapi.factory_new("NOT CALLABLE")
 
 
-
 def test_factory_create():
     f = Factory(list)
     assert _testcapi.factory_create(f) == []
+
 
 def test_field_type():
     t = _testcapi.field_type()
     # signature should match
     assert str(t) == "<class 'msgspec._core.Field'>"
 
+
 def test_field_check():
     f = field(1)
     assert _testcapi.field_check(f)
     assert not _testcapi.field_check("NOT A FIELD")
 
+
 def test_field_new():
     f = _testcapi.feild_new("name", None, None)
     assert isinstance(f, Field)
 
+
 def test_field_get_default():
     f = field(default="X")
     assert _testcapi.field_get_default(f) == "X"
+
 
 # TODO (Vizonex)
 #   - field_get_default (Exception Case)
