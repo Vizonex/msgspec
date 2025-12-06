@@ -39,13 +39,13 @@ def test_field_type():
 
 
 def test_field_check():
-    f = field(1)
+    f = field(default=1)
     assert _testcapi.field_check(f)
     assert not _testcapi.field_check("NOT A FIELD")
 
 
 def test_field_new():
-    f = _testcapi.feild_new("name", None, None)
+    f = _testcapi.field_new("name", None, None)
     assert isinstance(f, Field)
 
 
