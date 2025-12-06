@@ -1,7 +1,7 @@
-from msgspec._core import Field, Factory # noqa: F401
-from msgspec import field
-from msgspec import Struct
 import pytest
+from msgspec._core import Factory, Field  # noqa: F401
+
+from msgspec import field
 
 _testcapi = pytest.importorskip("msgspec._testcapi")
 
@@ -49,7 +49,7 @@ def test_field_get_default():
     f = field(default="X")
     assert _testcapi.field_get_default(f) == "X"
 
-# TODO (Vizonex) 
+# TODO (Vizonex)
 #   - field_get_default (Exception Case)
 #   - field_get_facotry
 #   - field_get_name
