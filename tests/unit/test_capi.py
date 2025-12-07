@@ -1,7 +1,7 @@
 import pytest
 from msgspec._core import Factory, Field  # noqa: F401
 
-from msgspec import field
+from msgspec import NODEFAULT, field
 
 _testcapi = pytest.importorskip("msgspec._testcapi")
 
@@ -45,8 +45,23 @@ def test_field_check():
 
 
 def test_field_new():
+    # None is used to simulate NULL to test a default will use something else...
     f = _testcapi.field_new("name", None, None)
     assert isinstance(f, Field)
+    # Now Simulate with NoDefault
+    f = _testcapi.field_new("name", NODEFAULT, NODEFAULT)
+    assert isinstance(f, Field)
+
+    # Try simultation of Default as a string
+    f = _testcapi.field_new("name", "default", NODEFAULT)
+    assert isinstance(f, Field)
+
+    # Simulate not being able to intake both a default and factory
+    with pytest.raises(TypeError, match="Cannot set both `value` and `factory`"):
+        _testcapi.field_new("name", 0, 0)
+
+    with pytest.raises(TypeError, match="factory must be callable"):
+        _testcapi.field_new("name", NODEFAULT, 0)
 
 
 def test_field_get_default():

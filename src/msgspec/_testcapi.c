@@ -91,7 +91,14 @@ static PyObject* field_new(PyObject* mod, PyObject *const *args, Py_ssize_t narg
     if (check_nargs("field_new", nargs, 3) < 0){
         return NULL;
     }
-    return get_capi(mod)->Field_New(args[0], args[1], args[2]);
+    // Will simulate None as NULL since it's kind of difficult to simulate a Null Pointer...
+    PyObject* _default = Py_IsNone(args[1]) ? NULL: Py_NewRef(args[1]);
+    PyObject* _factory = Py_IsNone(args[2]) ? NULL: Py_NewRef(args[2]);
+    PyObject* ret = get_capi(mod)->Field_New(args[0], _default, _factory);
+    /* Py_CLEAR has null checks of it's own before it clears out a value... */
+    Py_CLEAR(_default);
+    Py_CLEAR(_factory);
+    return ret;
 }
 
 typedef int (*capi_getter_func)(PyObject* self, PyObject** value);

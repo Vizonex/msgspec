@@ -2618,13 +2618,13 @@ PyObject* Field_New(PyObject* name, PyObject* value, PyObject* factory){
         PyErr_SetString(PyExc_TypeError, "name must be a str or None");
         return NULL;
     }
-    if ((value != NODEFAULT || value != NULL) && (factory != NODEFAULT || factory != NULL)) {
+    if ((value != NODEFAULT && value != NULL) && (factory != NODEFAULT && factory != NULL)) {
         PyErr_SetString(
-            PyExc_TypeError, "Cannot set both `value` and `vactory`"
+            PyExc_TypeError, "Cannot set both `value` and `factory`"
         );
         return NULL;
     }
-    if (factory != NODEFAULT) {
+    if (factory != NODEFAULT && factory != NULL) {
         if (!PyCallable_Check(factory)) {
             PyErr_SetString(PyExc_TypeError, "factory must be callable");
             return NULL;
