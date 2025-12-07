@@ -6753,6 +6753,90 @@ StructMeta_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
     );
 }
 
+/*************************************************************************
+ * StructMeta C-API                                                      *
+ *************************************************************************/
+
+static PyObject* 
+_StructMeta_New(
+    PyTypeObject *type, 
+    PyObject *name, 
+    PyObject *bases, 
+    PyObject *namespace,
+    PyObject *arg_tag_field, 
+    PyObject *arg_tag, 
+    PyObject *arg_rename,
+    int arg_omit_defaults, 
+    int arg_forbid_unknown_fields,
+    int arg_frozen, 
+    int arg_eq, 
+    int arg_order, 
+    bool arg_kw_only,
+    int arg_repr_omit_defaults, 
+    int arg_array_like,
+    int arg_gc, 
+    int arg_weakref, 
+    int arg_dict, 
+    int arg_cache_hash
+){
+    if (type == NULL || !ms_is_struct_meta(type)){
+        PyErr_SetString(PyExc_TypeError, "`type` must inherit from `StructMeta`");
+        return NULL;
+    }
+
+    if (name == NULL || !PyUnicode_Check(name)){
+        PyErr_SetString(PyExc_TypeError, "`name` must be a `str` type");
+        return NULL;
+    }
+
+    if (bases == NULL || !PyTuple_Check(bases)){
+        PyErr_SetString(PyExc_TypeError, "`bases` must be a `tuple` type");
+        return NULL;
+    }
+
+    if (namespace == NULL || !PyDict_Check(namespace)){
+        PyErr_SetString(PyExc_TypeError, "`namespace` must be a `dict` type");
+        return NULL;
+    }
+
+    return StructMeta_new_inner(
+        type, name, bases, namespace,
+        arg_tag_field, arg_tag, arg_rename,
+        arg_omit_defaults, arg_forbid_unknown_fields,
+        arg_frozen, arg_eq, arg_order, arg_kw_only,
+        arg_repr_omit_defaults, arg_array_like,
+        arg_gc, arg_weakref, arg_dict, arg_cache_hash
+    );
+
+}
+
+static inline int StructMeta_CheckOrFail(PyObject* self){
+    if (!ms_is_struct_inst(self)){
+        PyErr_Format(PyExc_TypeError, "`self` must inherit from `StructMeta` but `%s` doesn't", Py_TYPE(self)->tp_name);
+        return -1;
+    }
+    return 0;
+}
+
+static PyObject* StructMeta_GetFieldName(
+    PyObject* self,
+    Py_ssize_t index
+){
+    return (StructMeta_CheckOrFail(self) < 0) ? NULL: StructMeta_get_field_name(self, index);
+}
+
+static Py_ssize_t StructMeta_GetFieldIndex(
+    PyObject* self, 
+    const char* key, 
+    Py_ssize_t key_size
+){
+    return (StructMeta_CheckOrFail(self) < 0) ? -1:  StructMeta_get_field_index(self, key, key_size);
+}
+
+
+/*************************************************************************
+ * defstruct                                                             *
+ *************************************************************************/
 
 PyDoc_STRVAR(msgspec_defstruct__doc__,
 "defstruct(name, fields, *, bases=None, module=None, namespace=None, "
@@ -9310,6 +9394,67 @@ static PyTypeObject Ext_Type = {
     .tp_members = Ext_members,
     .tp_methods = Ext_methods
 };
+
+
+/*************************************************************************
+ * Ext C-API                                                             *
+ *************************************************************************/
+
+static int _Ext_TypeCheck_Or_Fail(PyObject* self){
+    if (!Py_IS_TYPE(self, &Ext_Type)){
+        PyErr_Format(
+            PyExc_TypeError,
+            "self must be an Ext type got %.200s",
+            Py_TYPE(self)->tp_name
+        );
+        return -1;
+    }
+    return 0;
+}
+
+static PyObject* 
+_Ext_New(long code, PyObject* data){
+    if (code > 127 || code < -128) {
+        PyErr_SetString(
+            PyExc_ValueError,
+            "code must be an int between -128 and 127"
+        );
+        return NULL;
+    }
+    if (!(PyBytes_CheckExact(data) || PyByteArray_CheckExact(data) || PyObject_CheckBuffer(data))) {
+        PyErr_Format(
+            PyExc_TypeError,
+            "data must be a bytes, bytearray, or buffer-like object, got %.200s",
+            Py_TYPE(data)->tp_name
+        );
+        return NULL;
+    }
+    return Ext_New(code, data);
+}
+
+/* Returns data from extension type, Returns -1 if Type is not an Ext type */
+static int Ext_GetData(PyObject* self, PyObject** data){
+    if (_Ext_TypeCheck_Or_Fail(self) < 0){
+        data = NULL;
+        return -1;
+    }
+    *data = Py_NewRef(((Ext*)self)->data);
+    return 0;
+};
+
+/* Returns code from extension type, Returns -1 if Type is not an Ext type */
+static int Ext_GetCode(PyObject* self, long* code){
+    if (_Ext_TypeCheck_Or_Fail(self) < 0){
+        code = NULL;
+        return -1;
+    }
+    *code = ((Ext*)self)->code;
+    return 0;
+}
+
+
+
+
 
 /*************************************************************************
  * Dataclass Utilities                                                   *
@@ -22307,13 +22452,28 @@ new_capsule(MsgspecState* state){
         return NULL;
     }
 
+    /* TYPES */
+    capi->Ext_Type = &Ext_Type;
     capi->Factory_Type = &Factory_Type;
     capi->Field_Type = &Field_Type;
+    capi->StructMeta_Type = &StructMetaType;
+    
+    capi->Ext_New = _Ext_New;
+    capi->Ext_GetCode = Ext_GetCode;
+    capi->Ext_GetData = Ext_GetData; 
+    
     capi->Factory_New = Factory_New;
     capi->Factory_Create = Factory_Create;
+
     capi->Field_New = Field_New;
     capi->Field_GetDefault = Field_GetDefault;
     capi->Field_GetFactory = Field_GetFactory;
+
+    capi->StructMeta_New = _StructMeta_New;
+    capi->StructMeta_GetFieldName = StructMeta_GetFieldName;
+    capi->StuctMeta_GetFieldIndex = StructMeta_GetFieldIndex;
+    
+
     PyObject* ret =
         PyCapsule_New(capi, MSGSPEC_CAPSULE_NAME, capsule_destructor);
     if (ret == NULL) {

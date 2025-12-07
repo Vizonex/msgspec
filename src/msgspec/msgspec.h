@@ -28,9 +28,14 @@ typedef struct _msgspec_capi {
     /* module_state (private) */
     void* _state;
 
+    PyTypeObject* Ext_Type;
     PyTypeObject* Factory_Type;
     PyTypeObject* Field_Type;
 
+    // Coming Soon...
+    // PyTypeObject* Raw_Type;
+
+    PyTypeObject* StructMeta_Type;
 
 
     /* Kept things in alphabetical order for the sake of neatness 
@@ -38,14 +43,19 @@ typedef struct _msgspec_capi {
 
     /* EXT */
 
-    // PyObject * (*Ext_New)(long code, PyObject* data);
+    /* Creates a new Extension Type, returns NULL if it fails, 
+    this will raise a ValueError if code 
+    is not between -128 and 127 and TypeError 
+    if data is not a bytes or bytearray object */
+    PyObject * (*Ext_New)(long code, PyObject* data);
 
-    /* XXX: Didn't know if Ext's data should be altered by the end user or not so I made a few gettypes */
+    /* Returns data from extension type, Returns -1 if Type is not an Ext type */
+    int (*Ext_GetData)(PyObject* self, PyObject** data);
+
+    /* Returns code from extension type, Returns -1 if Type is not an Ext type */
+    int (*Ext_GetCode)(PyObject* self, long* code);
+
     
-    // Might move Ext Structure to a new neighboring header file for Recasting to Cython maybe :/
-    /* Returns data and code from extension type, Returns -1 if Type is not an Ext type */
-    // int (*Ext_GetData)(PyObject* self, PyObject** data, long *code);
-
 
     /* Factory */
 
@@ -72,6 +82,54 @@ typedef struct _msgspec_capi {
     /* Obtains factory attribute, returns -1 if type is not a msgspec field */
     int (*Field_GetFactory)(PyObject* self, PyObject** factory);
 
+    /* Vizonex Note: (I'm deleting this note when the PR is done...)
+        Although rather big some developers have asked to subclass StructMeta 
+        And with cython being unable to implement metaclasses in a feasable way
+        to do what msgspec does it made more sense to me to just shove it in here
+
+        I have need to subclass this object for when I go to make a new library
+        called specsql which will have a TableMeta class for adding a tablename but
+        also to ensure that it has an attribute __tablename__ or __table__ to identify 
+        itself.
+        
+        SQLAlchemy and SQLModel are both slow and do not have the same serlization capabilities
+        and performace speeds that this library can achieve to begin with, hence my desire to 
+        add it.
+    */
+
+    /* Creates a new StructMeta structure, this can also be used to help subclass 
+    StructMeta for other lower-level projects that need StructMeta for Structure 
+    creation */
+    PyObject* (*StructMeta_New)(
+        PyTypeObject *type, 
+        PyObject *name, 
+        PyObject *bases, 
+        PyObject *namespace,
+        PyObject *arg_tag_field, 
+        PyObject *arg_tag, 
+        PyObject *arg_rename,
+        int arg_omit_defaults, 
+        int arg_forbid_unknown_fields,
+        int arg_frozen, 
+        int arg_eq, 
+        int arg_order, 
+        bool arg_kw_only,
+        int arg_repr_omit_defaults, 
+        int arg_array_like,
+        int arg_gc, 
+        int arg_weakref, 
+        int arg_dict, 
+        int arg_cache_hash
+    );
+
+    /* Obtains field information good for debugging or other use-cases 
+    Returns NULL and raises TypeError if self is not inherited from 
+    StructMeta */
+    PyObject* (*StructMeta_GetFieldName)(PyObject* self, Py_ssize_t index);
+    /* Obtains field information good for debugging or other use-cases returns -1 and raises TypeError if self is not inherited from StructMeta */
+    Py_ssize_t (*StuctMeta_GetFieldIndex)(PyObject* self, const char* key, Py_ssize_t key_size);
+
+
 } Msgspec_CAPI;
 
 /* Capsule */
@@ -85,6 +143,14 @@ Msgspec_Import()
 }
 
 #ifdef MSGSPEC_USE_CAPSULE_API // Define if your not using Cython or want to use your own capsule
+
+
+/*************************************************************************
+ * Ext                                                                   *
+ *************************************************************************/
+
+
+
 
 /*************************************************************************
  * Factory                                                               *
@@ -110,17 +176,21 @@ static inline int Field_CheckExact(Msgspec_CAPI* api, PyObject* ob){
     return Py_IS_TYPE(ob, api->Field_Type) || PyObject_TypeCheck(ob, api->Field_Type);
 }
 
-static inline int Field_GetName(Msgspec_CAPI* api, PyObject* self, PyObject** name){
-    return api->Field_GetName(self, name);
-};
 
-static inline int Field_GetDefault(Msgspec_CAPI* api, PyObject* self, PyObject** value){
-    return api->Field_GetDefault(self, value);
-};
+/*************************************************************************
+ * StructMeta                                                            *
+ *************************************************************************/
 
-static inline int Field_GetFactory(Msgspec_CAPI* api, PyObject* self, PyObject** factory){
-    return api->Field_GetFactory(self, factory);
+static inline int StructMeta_Check(Msgspec_CAPI* api, PyObject* ob){
+    return Py_IS_TYPE(ob, api->StructMeta_Type);
 }
+
+static inline int StructMeta_CheckExact(Msgspec_CAPI* api, PyObject* ob){
+    return Py_IS_TYPE(ob, api->StructMeta_Type) || PyObject_TypeCheck(ob, api->StructMeta_Type);
+}
+
+
+
 #endif /* MSGSPEC_USE_CAPSULE_API */
 
 
