@@ -6825,13 +6825,7 @@ static PyObject* StructMeta_GetFieldName(
     return (StructMeta_CheckOrFail(self) < 0) ? NULL: StructMeta_get_field_name(self, index);
 }
 
-static Py_ssize_t StructMeta_GetFieldIndex(
-    PyObject* self, 
-    const char* key, 
-    Py_ssize_t key_size
-){
-    return (StructMeta_CheckOrFail(self) < 0) ? -1:  StructMeta_get_field_index(self, key, key_size);
-}
+
 
 
 /*************************************************************************
@@ -22471,8 +22465,6 @@ new_capsule(MsgspecState* state){
 
     capi->StructMeta_New = _StructMeta_New;
     capi->StructMeta_GetFieldName = StructMeta_GetFieldName;
-    capi->StuctMeta_GetFieldIndex = StructMeta_GetFieldIndex;
-    
 
     PyObject* ret =
         PyCapsule_New(capi, MSGSPEC_CAPSULE_NAME, capsule_destructor);

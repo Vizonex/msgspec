@@ -4,7 +4,7 @@
 #include <Python.h>
 #include <datetime.h>
 #include <assert.h>
-
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -126,9 +126,6 @@ typedef struct _msgspec_capi {
     Returns NULL and raises TypeError if self is not inherited from 
     StructMeta */
     PyObject* (*StructMeta_GetFieldName)(PyObject* self, Py_ssize_t index);
-    /* Obtains field information good for debugging or other use-cases returns -1 and raises TypeError if self is not inherited from StructMeta */
-    Py_ssize_t (*StuctMeta_GetFieldIndex)(PyObject* self, const char* key, Py_ssize_t key_size);
-
 
 } Msgspec_CAPI;
 
