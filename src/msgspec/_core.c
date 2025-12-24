@@ -22453,6 +22453,7 @@ new_capsule(MsgspecState* state){
     capi->Factory_Type = &Factory_Type;
     capi->Field_Type = &Field_Type;
     capi->StructMeta_Type = &StructMetaType;
+    capi->StructMixin_Type = &StructMixinType;
     
     capi->Ext_New = _Ext_New;
     capi->Ext_GetCode = Ext_GetCode;
