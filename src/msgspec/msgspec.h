@@ -2,7 +2,6 @@
 #define MSGSPEC_H
 
 #include <Python.h>
-#include <datetime.h>
 #include <assert.h>
 #include <stdbool.h>
 
