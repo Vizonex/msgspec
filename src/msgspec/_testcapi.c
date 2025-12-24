@@ -210,7 +210,7 @@ static int table_meta_traverse(PyObject * self, visitproc visit, void * arg){
     return Py_TYPE(self)->tp_base->tp_traverse((PyObject*)self, visit, arg);
 }
 
-static int table_meta_clear(TableMetaObject * self){
+static int table_meta_clear(PyObject * self){
     return Py_TYPE(self)->tp_base->tp_clear((PyObject*)self);
 }
 
@@ -244,9 +244,9 @@ static PyTypeObject TableMetaType = {
     .tp_call = PyVectorcall_Call,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_TYPE_SUBCLASS | Py_TPFLAGS_HAVE_GC | _Py_TPFLAGS_HAVE_VECTORCALL | Py_TPFLAGS_BASETYPE,
     .tp_new = TableMeta_New,
-    .tp_traverse = table_meta_traverse,
-    .tp_clear = table_meta_clear,
-    .tp_dealloc = table_meta_dealloc,
+    .tp_traverse = (traverseproc)table_meta_traverse,
+    .tp_clear = (inquiry)table_meta_clear,
+    .tp_dealloc = (destructor)table_meta_dealloc,
 };
 
 /* This MixinType will allow ourselves gain access to our class attributes
@@ -307,6 +307,10 @@ static PyMethodDef module_methods[] = {
     {NULL, NULL}
 };
 
+PyDoc_STRVAR(Table__doc__, 
+"A Subclass of StructMeta meant to give an example of how msgspec could be used as an ORM Library."
+);
+
 static int
 module_exec(PyObject *mod)
 {
@@ -331,6 +335,14 @@ module_exec(PyObject *mod)
     if (PyModule_AddObjectRef(mod, "TableMixin", (PyObject*)(&TableMixinType)) < 0)
         return -1;
 
+    PyObject* TableType = PyObject_CallFunction(
+        (PyObject *)&TableMetaType, "s(O){ssss}", "Table", &TableMixinType,
+        "__module__", "msgspec._testcapi", "__doc__", Table__doc__
+    );
+    if (TableType == NULL) return -1;
+    Py_INCREF(TableType);
+    if (PyModule_AddObject(mod, "Table", TableType) < 0)
+        return -1;
     return 0;
 }
 

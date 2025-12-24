@@ -69,6 +69,23 @@ def test_field_get_default():
     assert _testcapi.field_get_default(f) == "X"
 
 
+def test_subclassed_Struct_with_attributes():
+    class XYTableBase(_testcapi.Table):
+        """
+        Base Table used to simulate a ORM Program
+        """
+
+    class XYTable(_testcapi.Table, table=True):
+        x:int
+        y:int
+
+    x = XYTable(3, 1)
+    assert x.x == 3
+    assert x.y == 1
+    assert x.__table_name__ == "XYTable"
+
+
+
 # TODO (Vizonex)
 #   - field_get_default (Exception Case)
 #   - field_get_facotry
