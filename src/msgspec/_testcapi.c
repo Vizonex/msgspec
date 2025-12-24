@@ -4,6 +4,8 @@
 #define MSGSPEC_USE_CAPSULE_API
 #include "msgspec.h"
 
+#include <stddef.h>
+
 /* Modeled after multidict's C-API tests written by the same author Vizonex */
 
 /* TODO: (Vizonex) 
