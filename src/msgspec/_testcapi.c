@@ -1,5 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#define MSGSPEC_USE_STRUCTURES
 #define MSGSPEC_USE_CAPSULE_API
 #include "msgspec.h"
 
@@ -15,12 +16,21 @@ typedef struct _mod_state {
     Msgspec_CAPI* capi;
 } mod_state;
 
+static PyModuleDef _testcapi_module;
+
 static inline mod_state *
 get_mod_state(PyObject *mod)
 {
     mod_state *state = (mod_state *)PyModule_GetState(mod);
     assert(state != NULL);
     return state;
+}
+
+static mod_state *
+testcapi_get_global_state(void)
+{
+    PyObject *module = PyState_FindModule(&_testcapi_module);
+    return module == NULL ? NULL : get_mod_state(module);
 }
 
 static inline Msgspec_CAPI*
@@ -134,6 +144,122 @@ static PyObject* field_get_factory(PyObject* mod, PyObject* arg){
 }
 
 
+/* This test simulates something very close to that of SQLModel 
+and it simulates an ORM styled library where __table_name__ & __abstract_table__ attributes
+are added in without disrupting Struct or anything that comes after it... */
+
+typedef struct {
+    StructMetaObject base;
+    /* These items should not be called with other fellow struct 
+    memebers these are primarly used as class attributes */
+    const char* table_name;
+    int abstract_table;
+} TableMetaObject;
+
+static PyTypeObject TableMetaType;
+
+/* tp_base is a lifesaver and is the key to making a working subclassable type */
+
+static PyObject* TableMeta_New(PyTypeObject* type, PyObject* args, PyObject* kwargs){
+    /* Will access the newly made object using PyType_GenericNew to save us a hassle */
+    int abstract = 1;
+    int grab_later = 0;
+    const char* table_name = NULL;
+
+    mod_state* state = testcapi_get_global_state();
+    PyObject* table = NULL;
+
+    /* kwargs can show up as NULL whenever it feels like it so we need an extra check here. */
+    if (kwargs != NULL)
+        table = PyDict_GetItemString(kwargs, "table");
+    if (table != NULL){
+        /* table is confirmed now so we 
+        initalize that value to prevent it 
+        from getting deleted */
+        Py_INCREF(table);
+
+        if (PyUnicode_Check(table)){
+            table_name = PyUnicode_AsUTF8(table);
+            abstract = 0;
+        } else if (PyBool_Check(table)) {
+            if (Py_IsTrue(table)){
+                abstract = 0;
+                /* We grab the name from the class object being derrived instead*/
+                table_name = PyUnicode_AsUTF8(PyTuple_GET_ITEM(args, 0));
+            }
+            /* if flase we shall remain abstract */
+        }
+        /* 
+            disallow msgspec from complaining about our 
+            newly added attribute by deleting it...
+        */
+        PyDict_DelItemString(kwargs, "table");
+    }
+    TableMetaObject *obj = (TableMetaObject*)type->tp_base->tp_new(type, args, kwargs);
+    if (obj == NULL)
+        return NULL;
+    obj->abstract_table = abstract;
+    obj->table_name = table_name;
+    return (PyObject*)obj;
+}
+
+
+static int table_meta_traverse(PyObject * self, visitproc visit, void * arg){
+    return Py_TYPE(self)->tp_base->tp_traverse((PyObject*)self, visit, arg);
+}
+
+static int table_meta_clear(TableMetaObject * self){
+    return Py_TYPE(self)->tp_base->tp_clear((PyObject*)self);
+}
+
+static void table_meta_dealloc(PyObject* self){
+    Py_TYPE(self)->tp_base->tp_dealloc((PyObject*)self);
+}
+
+static PyObject* TableMixin_table_name(PyObject* self, void* closure){
+    TableMetaObject* meta = ((TableMetaObject*)Py_TYPE(self));
+    if (meta->abstract_table)
+        Py_RETURN_NONE;
+    return PyUnicode_FromString(meta->table_name);
+};
+
+static PyObject* TableMixin_abstract_table(PyObject* self, void* closure){
+    return PyBool_FromLong(((TableMetaObject*)Py_TYPE(self))->abstract_table);
+}
+
+static PyGetSetDef TableMixin_getset[] = {
+    {"__table_name__", (getter)TableMixin_table_name, NULL, "Table name", NULL},
+    {"__abstract_table__", (getter)TableMixin_abstract_table, NULL, "flag for checking if given ORM Table is abstract", NULL},
+    {NULL},
+};
+
+static PyTypeObject TableMetaType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "msgspec._testcapi.TableMeta",
+    .tp_basicsize = sizeof(TableMetaObject),
+    .tp_itemsize = 0,
+    .tp_vectorcall_offset = offsetof(PyTypeObject, tp_vectorcall),
+    .tp_call = PyVectorcall_Call,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_TYPE_SUBCLASS | Py_TPFLAGS_HAVE_GC | _Py_TPFLAGS_HAVE_VECTORCALL | Py_TPFLAGS_BASETYPE,
+    .tp_new = TableMeta_New,
+    .tp_traverse = table_meta_traverse,
+    .tp_clear = table_meta_clear,
+    .tp_dealloc = table_meta_dealloc,
+};
+
+/* This MixinType will allow ourselves gain access to our class attributes
+without screwing around with Msgspec's internal types */
+static PyTypeObject TableMixinType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "msgspec._testcapi.TableMixin",
+    .tp_basicsize = 0,
+    .tp_itemsize = 0,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .tp_getset = TableMixin_getset,
+};
+
+
+
 /* module slots */
 
 static int
@@ -187,6 +313,22 @@ module_exec(PyObject *mod)
     if (state->capi == NULL) {
         return -1;
     }
+
+    TableMetaType.tp_base = state->capi->StructMeta_Type;
+    TableMixinType.tp_base = state->capi->StructMixin_Type;
+
+    if (PyType_Ready(&TableMetaType) < 0)
+        return -1;
+
+    if (PyModule_AddObjectRef(mod, "TableMeta", (PyObject*)(&TableMetaType)) < 0)
+        return -1;
+
+    if (PyType_Ready(&TableMixinType) < 0)
+        return -1;
+
+    if (PyModule_AddObjectRef(mod, "TableMixin", (PyObject*)(&TableMixinType)) < 0)
+        return -1;
+
     return 0;
 }
 

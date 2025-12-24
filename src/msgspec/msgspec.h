@@ -35,8 +35,9 @@ typedef struct _msgspec_capi {
     // Coming Soon...
     // PyTypeObject* Raw_Type;
 
+    /* used for internally subclassing within C */
     PyTypeObject* StructMeta_Type;
-
+    PyTypeObject* StructMixin_Type;
 
     /* Kept things in alphabetical order for the sake of neatness 
     let me know if this is not the order you want these in... */
@@ -189,6 +190,110 @@ static inline int StructMeta_CheckExact(Msgspec_CAPI* api, PyObject* ob){
 
 
 #endif /* MSGSPEC_USE_CAPSULE_API */
+
+
+#ifdef MSGSPEC_USE_STRUCTURES 
+
+typedef union TypeDetail {
+    int64_t i64;
+    double f64;
+    Py_ssize_t py_ssize_t;
+    void *pointer;
+} TypeDetail;
+
+typedef struct TypeNode {
+    uint64_t types;
+    TypeDetail details[];
+} TypeNode;
+
+/* A simple extension of TypeNode to allow for static allocation */
+typedef struct {
+    uint64_t types;
+    TypeDetail details[1];
+} TypeNodeSimple;
+
+typedef struct {
+    PyObject_HEAD
+    PyObject *int_lookup;
+    PyObject *str_lookup;
+    bool literal_none;
+} LiteralInfo;
+
+typedef struct {
+    PyObject *key;
+    TypeNode *type;
+} TypedDictField;
+
+typedef struct {
+    PyObject_VAR_HEAD
+    Py_ssize_t nrequired;
+    TypedDictField fields[];
+} TypedDictInfo;
+
+typedef struct {
+    PyObject *key;
+    TypeNode *type;
+} DataclassField;
+
+typedef struct {
+    PyObject_VAR_HEAD
+    PyObject *class;
+    PyObject *pre_init;
+    PyObject *post_init;
+    PyObject *defaults;
+    DataclassField fields[];
+} DataclassInfo;
+
+typedef struct {
+    PyObject_VAR_HEAD
+    PyObject *class;
+    PyObject *defaults;
+    TypeNode *types[];
+} NamedTupleInfo;
+
+struct StructInfo;
+
+typedef struct {
+    PyHeapTypeObject base;
+    PyObject *struct_fields;
+    PyObject *struct_defaults;
+    Py_ssize_t *struct_offsets;
+    PyObject *struct_encode_fields;
+    struct StructInfo *struct_info;
+    Py_ssize_t nkwonly;
+    Py_ssize_t n_trailing_defaults;
+    PyObject *struct_tag_field;  /* str or NULL */
+    PyObject *struct_tag_value;  /* str or NULL */
+    PyObject *struct_tag;        /* True, str, or NULL */
+    PyObject *match_args;
+    PyObject *rename;
+    PyObject *post_init;
+    Py_ssize_t hash_offset;  /* 0 for no caching, otherwise offset */
+    int8_t frozen;
+    int8_t order;
+    int8_t eq;
+    int8_t repr_omit_defaults;
+    int8_t array_like;
+    int8_t gc;
+    int8_t omit_defaults;
+    int8_t forbid_unknown_fields;
+} StructMetaObject;
+
+typedef struct StructInfo {
+    PyObject_VAR_HEAD
+    StructMetaObject *class;
+#ifdef Py_GIL_DISABLED
+    _Atomic(uint8_t) initialized;
+#endif
+    TypeNode *types[];
+} StructInfo;
+
+typedef struct {
+    PyObject_HEAD
+    StructMetaObject *st_type;
+} StructConfig;
+
+#endif /* MSGSPEC_USE_STRUCTURES */
 
 
 #ifdef __cplusplus

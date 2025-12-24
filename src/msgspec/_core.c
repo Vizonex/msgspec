@@ -5754,7 +5754,9 @@ structmeta_get_module_ns(MsgspecState *mod, StructMetaInfo *info) {
 
 static int
 structmeta_collect_base(StructMetaInfo *info, MsgspecState *mod, PyObject *base) {
-    if ((PyTypeObject *)base == &StructMixinType) return 0;
+    /* StructMixin could be theoretically subclassed for other
+    purpouses see: _testcapi.c */
+    if (Py_IS_TYPE(base, &StructMixinType)) return 0;
 
     if (((PyTypeObject *)base)->tp_weaklistoffset) {
         info->already_has_weakref = true;
