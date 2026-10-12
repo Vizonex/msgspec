@@ -22352,6 +22352,60 @@ error:
     return NULL;
 }
 
+static PyObject *
+convert_mapping_to_typeddict(
+    ConvertState *self, PyObject *obj, TypeNode *type, PathNode *path
+) {
+    if (Py_EnterRecursiveCall(" while deserializing an object")) return NULL;
+
+    PyObject *out = PyDict_New();
+    if (out == NULL) goto error;
+
+    TypedDictInfo *info = TypeNode_get_typeddict_info(type);
+    /* -1 if a recursive TypedDict cached this info before a failed init */
+    if (info->nrequired < 0) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "TypedDict type is incomplete: a recursively referenced type failed to initialize"
+        );
+        goto error;
+    }
+    Py_ssize_t nrequired = 0;
+    for (Py_ssize_t i = 0; i < Py_SIZE(info); i++) {
+        PyObject *field = info->fields[i].key;
+        assert(field != NULL);
+        TypeNode *field_type = info->fields[i].type;
+        assert(field_type != NULL);
+        /* Item lookup only, to avoid collisions with mapping methods. */
+        PyObject *item = PyObject_GetItem(obj, field);
+        if (item == NULL) {
+            if (!PyErr_ExceptionMatches(PyExc_KeyError)) goto error;
+            PyErr_Clear();
+            continue;
+        }
+        if (field_type->types & MS_EXTRA_FLAG) nrequired++;
+        PathNode field_path = {path, PATH_STR, field};
+        PyObject *val = convert(self, item, field_type, &field_path);
+        Py_DECREF(item);
+        if (val == NULL) goto error;
+        int status = PyDict_SetItem(out, field, val);
+        Py_DECREF(val);
+        if (status < 0) goto error;
+    }
+    if (nrequired < info->nrequired) {
+        /* A required field is missing, determine which one and raise */
+        TypedDictInfo_error_missing(info, out, path);
+        goto error;
+    }
+    Py_LeaveRecursiveCall();
+    return out;
+
+error:
+    Py_LeaveRecursiveCall();
+    Py_XDECREF(out);
+    return NULL;
+}
+
 static bool
 Lookup_union_contains_type(Lookup *lookup, PyTypeObject *cls) {
     if (Lookup_IsStrLookup(lookup)) {
@@ -22478,6 +22532,9 @@ convert_other(
         }
         else if (type->types & MS_TYPE_DATACLASS) {
             return convert_object_to_dataclass(self, obj, type, path, getter);
+        }
+        else if (is_mapping && (type->types & MS_TYPE_TYPEDDICT)) {
+            return convert_mapping_to_typeddict(self, obj, type, path);
         }
     }
 
