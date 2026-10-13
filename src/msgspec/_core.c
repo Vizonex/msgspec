@@ -1657,7 +1657,7 @@ static PyTypeObject Raw_Type = {
     .tp_name = "msgspec.Raw",
     .tp_doc = Raw__doc__,
     .tp_basicsize = sizeof(Raw),
-    .tp_itemsize = sizeof(char),
+    .tp_itemsize = 0,
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_new = Raw_new,
     .tp_dealloc = (destructor) Raw_dealloc,
@@ -23276,12 +23276,14 @@ PyInit__core(void)
     if (temp_obj == NULL) return NULL;
     st->uuid_safeuuid_unknown = PyObject_GetAttrString(temp_obj, "unknown");
     Py_DECREF(temp_obj);
+    Py_DECREF(temp_module);
     if (st->uuid_safeuuid_unknown == NULL) return NULL;
 
     /* decimal module imports */
     temp_module = PyImport_ImportModule("decimal");
     if (temp_module == NULL) return NULL;
     st->DecimalType = PyObject_GetAttrString(temp_module, "Decimal");
+    Py_DECREF(temp_module);
     if (st->DecimalType == NULL) return NULL;
 
     /* Get the re.compile function */
