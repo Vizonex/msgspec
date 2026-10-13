@@ -1953,6 +1953,32 @@ class TestNamedTuple:
         with pytest.raises(msgspec.DecodeError, match=error):
             msgspec.json.decode(s, type=Test)
 
+    def test_namedtuple_like(self):
+        # This is not exactly a `NamedTuple`, but it passed the check:
+        class FieldsNotTuple(tuple):
+            _fields = ["a", "b"]
+            _default_fields = {}
+
+        class NotSequenceFields(tuple):
+            _fields = 1
+
+        class MissingDefaults(tuple):
+            _fields = ("a", "b")
+
+        class NotTupleSubclass:
+            _fields = ("a", "b")
+            _default_fields = {}
+
+        # It used to crash:
+        for klass in (
+            FieldsNotTuple,
+            NotSequenceFields,
+            MissingDefaults,
+            NotTupleSubclass,
+        ):
+            with pytest.raises(msgspec.ValidationError, match=klass.__name__):
+                msgspec.json.decode(b"[1, 2]", type=klass)
+
 
 class TestDict:
     def test_encode_dict_raises_non_string_or_numeric_keys(self):
