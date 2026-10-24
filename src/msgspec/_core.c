@@ -10274,14 +10274,6 @@ ms_decode_custom(PyObject *obj, PyObject *dec_hook, TypeNode* type, PathNode *pa
             return NULL;
         }
     }
-    else if (builtin_hook != NULL){
-        out = PyObject_CallFunctionObjArgs(builtin_hook, custom_obj, obj, NULL);
-        Py_DECREF(obj);
-        if (out == NULL) {
-            ms_maybe_wrap_validation_error(path);
-            return NULL;
-        }
-    }
     else {
         out = obj;
     }
