@@ -10264,6 +10264,7 @@ ms_decode_custom(PyObject *obj, PyObject *dec_hook, TypeNode* type, PathNode *pa
 
     if (obj == Py_None && type->types & MS_TYPE_NONE) return obj;
 
+    MsgspecState *st = msgspec_get_global_state();
     custom_obj = TypeNode_get_custom(type);
 
     if (dec_hook != NULL) {
@@ -10274,13 +10275,20 @@ ms_decode_custom(PyObject *obj, PyObject *dec_hook, TypeNode* type, PathNode *pa
             return NULL;
         }
     }
+    else if (PyObject_HasAttr(custom_obj, st->str___msgspec_decode__)){
+        /* Check if msgspec can decode it. */
+        out = PyObject_CallMethodObjArgs(custom_obj, st->str___msgspec_decode__, obj, NULL);
+        Py_DECREF(obj);
+        if (out == NULL) {
+            ms_maybe_wrap_validation_error(path);
+            return NULL;
+        }
+    }
     else {
         out = obj;
     }
-
     /* Generic classes must be checked based on __origin__ */
     if (generic) {
-        MsgspecState *st = msgspec_get_global_state();
         custom_cls = PyObject_GetAttr(custom_obj, st->str___origin__);
         if (custom_cls == NULL) {
             Py_DECREF(out);
